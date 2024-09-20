@@ -41,8 +41,21 @@ func TestAsyncWriter(t *testing.T) {
 		data1 := []byte("Hello, ")
 		data2 := []byte("AsyncWriter!")
 
-		writer.Write(data1)
-		writer.Write(data2)
+		n, err := writer.Write(data1)
+		if err != nil {
+			t.Fatalf("Write error: %v", err)
+		}
+		if n != len(data1) {
+			t.Errorf("Expected to write %d bytes, but wrote %d", len(data1), n)
+		}
+
+		n, err = writer.Write(data2)
+		if err != nil {
+			t.Fatalf("Write error: %v", err)
+		}
+		if n != len(data2) {
+			t.Errorf("Expected to write %d bytes, but wrote %d", len(data2), n)
+		}
 
 		writer.Close()
 		time.Sleep(10 * time.Millisecond) // Allow time for flushing
