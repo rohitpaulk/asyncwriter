@@ -5,15 +5,17 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 )
 
 type AsyncWriter struct {
-	buffer            chan []byte
-	flushCondition    sync.Cond
-	flushError        error
-	flushedItemsCount int
-	isClosed          bool
-	writer            io.Writer
+	acceptedWritesCount atomic.Int32
+	buffer              chan string
+	flushCondition      sync.Cond
+	flushError          error
+	flushedWritesCount  atomic.Int32
+	isClosed            bool
+	writer              io.Writer
 }
 
 func New(w io.Writer) *AsyncWriter {
@@ -22,11 +24,12 @@ func New(w io.Writer) *AsyncWriter {
 
 func NewWithSize(w io.Writer, bufferSize int) *AsyncWriter {
 	writer := &AsyncWriter{
-		buffer:            make(chan []byte, bufferSize),
-		flushCondition:    sync.Cond{L: &sync.Mutex{}},
-		flushError:        nil,
-		flushedItemsCount: 0,
-		writer:            w,
+		acceptedWritesCount: atomic.Int32{},
+		buffer:              make(chan string, bufferSize),
+		flushCondition:      sync.Cond{L: &sync.Mutex{}},
+		flushError:          nil,
+		flushedWritesCount:  atomic.Int32{},
+		writer:              w,
 	}
 
 	go writer.runFlushLoop()
@@ -37,14 +40,17 @@ func (w *AsyncWriter) Flush() error {
 	w.flushCondition.L.Lock()
 	defer w.flushCondition.L.Unlock()
 
-	currentFlushedItemsCount := w.flushedItemsCount
-	currentBufferLength := len(w.buffer)
-
-	if currentBufferLength == 0 {
+	if w.flushError != nil {
 		return w.flushError
 	}
 
-	for w.flushedItemsCount < currentFlushedItemsCount+currentBufferLength {
+	currentAcceptedWritesCount := w.acceptedWritesCount.Load()
+
+	if w.flushedWritesCount.Load() == currentAcceptedWritesCount {
+		return w.flushError
+	}
+
+	for w.flushedWritesCount.Load() < currentAcceptedWritesCount {
 		w.flushCondition.Wait()
 
 		if w.flushError != nil {
@@ -65,7 +71,8 @@ func (w *AsyncWriter) Write(b []byte) (int, error) {
 		return 0, errors.New("writer is closed")
 	}
 
-	w.buffer <- b
+	w.buffer <- string(b)
+	w.acceptedWritesCount.Add(1)
 
 	return len(b), nil
 }
@@ -75,12 +82,13 @@ func (w *AsyncWriter) runFlushLoop() {
 
 	for b := range w.buffer {
 		currentBufferLength := len(w.buffer)
+
 		bytesToFlush := bytes.NewBuffer([]byte{})
-		bytesToFlush.Write(b)
+		bytesToFlush.WriteString(b)
 
 		// Drain buffer based on current buffer length. Any future writes will be buffered.
 		for i := 0; i < currentBufferLength; i++ {
-			bytesToFlush.Write(<-w.buffer)
+			bytesToFlush.WriteString(<-w.buffer)
 		}
 
 		_, err := io.Copy(w.writer, bytesToFlush)
@@ -90,7 +98,7 @@ func (w *AsyncWriter) runFlushLoop() {
 		}
 
 		w.flushCondition.L.Lock()
-		w.flushedItemsCount += currentBufferLength + 1 // +1 for the current item
+		w.flushedWritesCount.Add(int32(currentBufferLength + 1))
 		w.flushCondition.Signal()
 		w.flushCondition.L.Unlock()
 	}
