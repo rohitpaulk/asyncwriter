@@ -71,7 +71,7 @@ func (w *AsyncWriter) Write(b []byte) (int, error) {
 }
 
 func (w *AsyncWriter) runFlushLoop() {
-	defer w.flushCondition.Signal()
+	defer w.flushCondition.Signal() // Ensure we notify Flush() if we exit w/ an error
 
 	for b := range w.buffer {
 		currentBufferLength := len(w.buffer)
