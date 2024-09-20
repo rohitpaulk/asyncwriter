@@ -99,4 +99,67 @@ func TestAsyncWriter(t *testing.T) {
 			t.Errorf("Expected no error on Close, but got: %v", err)
 		}
 	})
+
+	t.Run("Flush", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		writer := New(buf)
+
+		data := []byte("Hello, AsyncWriter!")
+		_, err := writer.Write(data)
+		if err != nil {
+			t.Fatalf("Write error: %v", err)
+		}
+
+		err = writer.Flush()
+		if err != nil {
+			t.Fatalf("Flush error: %v", err)
+		}
+
+		if buf.String() != string(data) {
+			t.Errorf("Expected %q after Flush, but got %q", string(data), buf.String())
+		}
+	})
+
+	t.Run("Flush Empty Buffer", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		writer := New(buf)
+
+		err := writer.Flush()
+		if err != nil {
+			t.Fatalf("Flush error on empty buffer: %v", err)
+		}
+
+		if buf.Len() != 0 {
+			t.Errorf("Expected empty buffer after Flush, but got %d bytes", buf.Len())
+		}
+	})
+
+	t.Run("Flush After Error", func(t *testing.T) {
+		errWriter := &errorWriter{err: io.ErrShortWrite}
+		writer := New(errWriter)
+
+		n, err := writer.Write([]byte("Hello"))
+		if n != 5 {
+			t.Errorf("Expected to write 5 bytes, but wrote %d", n)
+		}
+		if err != nil {
+			t.Errorf("Expected no error, but got: %v", err)
+		}
+
+		time.Sleep(10 * time.Millisecond) // Allow time for error to be set
+
+		err = writer.Flush()
+		if err != io.ErrShortWrite {
+			t.Errorf("Expected ErrShortWrite, but got: %v", err)
+		}
+	})
+}
+
+// errorWriter is a test helper that always returns an error on Write
+type errorWriter struct {
+	err error
+}
+
+func (w *errorWriter) Write(p []byte) (n int, err error) {
+	return 0, w.err
 }
