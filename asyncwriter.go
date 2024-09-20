@@ -2,6 +2,7 @@ package asyncwriter
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"sync"
 )
@@ -11,6 +12,7 @@ type AsyncWriter struct {
 	flushCondition    sync.Cond
 	flushError        error
 	flushedItemsCount int
+	isClosed          bool
 	writer            io.Writer
 }
 
@@ -59,6 +61,10 @@ func (w *AsyncWriter) Write(b []byte) (int, error) {
 		return 0, w.flushError
 	}
 
+	if w.isClosed {
+		return 0, errors.New("writer is closed")
+	}
+
 	w.buffer <- b
 
 	return len(b), nil
@@ -91,6 +97,7 @@ func (w *AsyncWriter) runFlushLoop() {
 }
 
 func (w *AsyncWriter) Close() error {
+	w.isClosed = true
 	close(w.buffer)
 
 	if closer, ok := w.writer.(io.Closer); ok {
