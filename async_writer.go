@@ -2,6 +2,7 @@ package asyncwriter
 
 import (
 	"io"
+	"log"
 )
 
 type AsyncWriter struct {
@@ -25,13 +26,29 @@ func NewWithSize(w io.Writer, bufferSize int) *AsyncWriter {
 
 func (w *AsyncWriter) Write(b []byte) (int, error) {
 	w.buffer <- b
+	return len(b), nil
 }
 
 func (w *AsyncWriter) runFlushLoop() {
 	for {
 		select {
+		// There's 1 or more messages available in the buffer
 		case b := <-w.buffer:
-			_, err := w.writer.Write(b)
+			if b == nil {
+				// w.Buffer is closed
+				return
+			}
+
+			currentBufferLength := len(w.buffer)
+
+			bytesToFlush := make([]byte, currentBufferLength)
+			bytesToFlush = append(bytesToFlush, b...)
+
+			for i := 0; i < currentBufferLength; i++ {
+				bytesToFlush = append(bytesToFlush, <-w.buffer...)
+			}
+
+			_, err := w.writer.Write(bytesToFlush)
 			if err != nil {
 				log.Printf("error writing to writer: %v", err)
 			}
