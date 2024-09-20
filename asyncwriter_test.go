@@ -2,7 +2,9 @@ package asyncwriter
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -70,12 +72,17 @@ func TestAsyncWriter(t *testing.T) {
 		buf := &bytes.Buffer{}
 		writer := New(buf)
 
+		msgs := make([]string, 100)
+		for i := 0; i < 100; i++ {
+			msgs[i] = fmt.Sprintf("Write %-3d", i)
+		}
+
 		var wg sync.WaitGroup
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				data := []byte("Write ")
+				data := []byte(msgs[i])
 				writer.Write(data)
 			}(i)
 		}
@@ -84,8 +91,14 @@ func TestAsyncWriter(t *testing.T) {
 		writer.Close()
 		time.Sleep(10 * time.Millisecond) // Allow time for flushing
 
-		if len(buf.Bytes()) != 600 { // "Write " is 6 bytes, 100 times
-			t.Errorf("Expected 600 bytes, but got %d", len(buf.Bytes()))
+		if len(buf.Bytes()) != 900 { // "Write 123" is 9 bytes, 100 times
+			t.Errorf("Expected 900 bytes, but got %d", len(buf.Bytes()))
+		}
+
+		for i := 0; i < 100; i++ {
+			if !strings.Contains(buf.String(), msgs[i]) {
+				t.Errorf("Expected to find %q in the buffer, but it was not found", msgs[i])
+			}
 		}
 	})
 
