@@ -60,6 +60,7 @@ func (w *AsyncWriter) Write(b []byte) (int, error) {
 	}
 
 	w.buffer <- b
+
 	return len(b), nil
 }
 

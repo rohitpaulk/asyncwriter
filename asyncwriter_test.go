@@ -153,6 +153,21 @@ func TestAsyncWriter(t *testing.T) {
 			t.Errorf("Expected ErrShortWrite, but got: %v", err)
 		}
 	})
+
+	t.Run("Write After Close", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		writer := New(buf)
+
+		err := writer.Close()
+		if err != nil {
+			t.Fatalf("Close error: %v", err)
+		}
+
+		_, err = writer.Write([]byte("Hello"))
+		if err == nil {
+			t.Error("Expected error when writing to closed AsyncWriter, but got nil")
+		}
+	})
 }
 
 // errorWriter is a test helper that always returns an error on Write
