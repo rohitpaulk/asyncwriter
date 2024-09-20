@@ -108,6 +108,8 @@ func (w *AsyncWriter) Close() error {
 	w.isClosed = true
 	close(w.buffer)
 
+	w.Flush()
+
 	if closer, ok := w.writer.(io.Closer); ok {
 		return closer.Close()
 	}
