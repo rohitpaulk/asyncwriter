@@ -1,6 +1,7 @@
 package asyncwriter
 
 import (
+	"bytes"
 	"io"
 	"log"
 )
@@ -32,15 +33,15 @@ func (w *AsyncWriter) Write(b []byte) (int, error) {
 func (w *AsyncWriter) runFlushLoop() {
 	for b := range w.buffer {
 		currentBufferLength := len(w.buffer)
-		bytesToFlush := make([]byte, currentBufferLength)
-		bytesToFlush = append(bytesToFlush, b...)
+		bytesToFlush := bytes.NewBuffer([]byte{})
+		bytesToFlush.Write(b)
 
 		// Drain buffer based on current buffer length. Any future writes will be buffered.
-		for i := 1; i < currentBufferLength; i++ {
-			bytesToFlush = append(bytesToFlush, <-w.buffer...)
+		for i := 0; i < currentBufferLength; i++ {
+			bytesToFlush.Write(<-w.buffer)
 		}
 
-		_, err := w.writer.Write(bytesToFlush)
+		_, err := w.writer.Write(bytesToFlush.Bytes())
 		if err != nil {
 			log.Printf("error writing to writer: %v", err)
 		}
